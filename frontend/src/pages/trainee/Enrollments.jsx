@@ -40,6 +40,9 @@ export default function Enrollments() {
             <div className="card" key={e.id}>
               <h3>{course?.title || "Course"}</h3>
               <p className="muted">Status: {e.status}</p>
+              <Link to={`/trainee/courses/${e.course_id}/content`}>
+                <button className="secondary">Open Lessons</button>
+              </Link>
 
               <div style={{ margin: "10px 0" }}>
                 <strong>Assessments</strong>

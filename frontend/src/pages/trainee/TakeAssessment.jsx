@@ -55,18 +55,29 @@ export default function TakeAssessment() {
                 {i + 1}. {q.question_text}
               </strong>
             </p>
-            {["a", "b", "c", "d"].map((opt) => (
-              <label key={opt} style={{ display: "block", fontWeight: 400 }}>
-                <input
-                  type="radio"
-                  name={q.id}
-                  value={opt.toUpperCase()}
-                  checked={answers[q.id] === opt.toUpperCase()}
-                  onChange={() => selectAnswer(q.id, opt.toUpperCase())}
-                />{" "}
-                {q[`option_${opt}`]}
-              </label>
-            ))}
+            {q.question_type === "mcq" || q.question_type === "true_false" ? (
+              ["a", "b", "c", "d"]
+                .filter((opt) => q[`option_${opt}`] != null)
+                .map((opt) => (
+                  <label key={opt} style={{ display: "block", fontWeight: 400 }}>
+                    <input
+                      type="radio"
+                      name={q.id}
+                      value={opt.toUpperCase()}
+                      checked={answers[q.id] === opt.toUpperCase()}
+                      onChange={() => selectAnswer(q.id, opt.toUpperCase())}
+                    />{" "}
+                    {q[`option_${opt}`]}
+                  </label>
+                ))
+            ) : (
+              <input
+                type="text"
+                placeholder={q.question_type === "fill_in_blank" ? "Your answer" : "Your answer (short)"}
+                value={answers[q.id] || ""}
+                onChange={(e) => selectAnswer(q.id, e.target.value)}
+              />
+            )}
           </div>
         ))}
         {error && <p className="error-text">{error}</p>}

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import *  # noqa: F401,F403  — ensures all models are registered on Base
-from app.api.routes import auth, users, courses, materials, assessments, feedback, announcements, admin
+from app.api.routes import auth, users, courses, materials, assessments, feedback, announcements, admin, content
 
 app = FastAPI(title="Training Platform API", version="1.0.0")
 
@@ -32,6 +32,7 @@ app.include_router(assessments.router)
 app.include_router(feedback.router)
 app.include_router(announcements.router)
 app.include_router(admin.router)
+app.include_router(content.router)
 
 
 @app.get("/api/health", tags=["health"])

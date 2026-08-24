@@ -1,10 +1,18 @@
 import uuid
+import enum
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Integer, Numeric, CHAR, UniqueConstraint, func
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Integer, Numeric, UniqueConstraint, Enum, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+
+
+class QuestionType(str, enum.Enum):
+    mcq = "mcq"
+    true_false = "true_false"
+    fill_in_blank = "fill_in_blank"
+    short_answer = "short_answer"
 
 
 class Assessment(Base):
@@ -26,12 +34,14 @@ class AssessmentQuestion(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     assessment_id = Column(UUID(as_uuid=True), ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False)
+    question_type = Column(Enum(QuestionType, name="question_type"), nullable=False, default=QuestionType.mcq)
     question_text = Column(Text, nullable=False)
-    option_a = Column(String(500), nullable=False)
-    option_b = Column(String(500), nullable=False)
-    option_c = Column(String(500), nullable=False)
-    option_d = Column(String(500), nullable=False)
-    correct_option = Column(CHAR(1), nullable=False)  # 'A' | 'B' | 'C' | 'D'
+    option_a = Column(String(500), nullable=True)
+    option_b = Column(String(500), nullable=True)
+    option_c = Column(String(500), nullable=True)
+    option_d = Column(String(500), nullable=True)
+    # mcq/true_false: correct option letter (A-D). fill_in_blank/short_answer: expected free text.
+    correct_answer = Column(String(500), nullable=False)
     competency_tag = Column(String(120), nullable=True)
 
     assessment = relationship("Assessment", back_populates="questions")

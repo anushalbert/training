@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.assessment import Assessment, AssessmentQuestion, AssessmentSubmission
+from app.models.assessment import Assessment, AssessmentQuestion, AssessmentSubmission, QuestionType
 from app.models.course import Course, Enrollment
 from app.models.user import User, UserRole
 from app.schemas.assessment import (
@@ -129,7 +129,14 @@ def submit_assessment(
     correct = 0
     for q in questions:
         submitted_answer = payload.answers.get(q.id)
-        if submitted_answer and submitted_answer.upper() == q.correct_option:
+        if not submitted_answer:
+            continue
+        if q.question_type in (QuestionType.mcq, QuestionType.true_false):
+            is_correct = submitted_answer.strip().upper() == q.correct_answer.strip().upper()
+        else:
+            # fill_in_blank / short_answer: best-effort normalized text match
+            is_correct = submitted_answer.strip().lower() == q.correct_answer.strip().lower()
+        if is_correct:
             correct += 1
 
     score = round((correct / total) * 100, 2) if total else 0.0

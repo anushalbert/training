@@ -2,7 +2,7 @@ import uuid
 import enum
 
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, SmallInteger, Enum, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -28,6 +28,7 @@ class Course(Base):
     description = Column(Text, nullable=True)
     trainer_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status = Column(Enum(CourseStatus, name="course_status"), nullable=False, default=CourseStatus.draft)
+    meta = Column(JSONB, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -36,6 +37,8 @@ class Course(Base):
     materials = relationship("CourseMaterial", back_populates="course", cascade="all, delete-orphan")
     enrollments = relationship("Enrollment", back_populates="course", cascade="all, delete-orphan")
     assessments = relationship("Assessment", back_populates="course", cascade="all, delete-orphan")
+    weeks = relationship("CourseWeek", back_populates="course", cascade="all, delete-orphan", order_by="CourseWeek.week_number")
+    qa_items = relationship("CourseQAItem", back_populates="course", cascade="all, delete-orphan")
 
 
 class CourseCompetency(Base):

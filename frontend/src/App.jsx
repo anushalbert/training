@@ -11,11 +11,13 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import TrainerDashboard from "./pages/trainer/TrainerDashboard";
 import UploadMaterial from "./pages/trainer/UploadMaterial";
 import CreateQuestionnaire from "./pages/trainer/CreateQuestionnaire";
+import ImportContent from "./pages/trainer/ImportContent";
 
 import TraineeDashboard from "./pages/trainee/TraineeDashboard";
 import Profile from "./pages/trainee/Profile";
 import Enrollments from "./pages/trainee/Enrollments";
 import TakeAssessment from "./pages/trainee/TakeAssessment";
+import CourseContent from "./pages/trainee/CourseContent";
 
 export default function App() {
   return (
@@ -35,6 +37,8 @@ export default function App() {
           <Route path="/trainer" element={<TrainerDashboard />} />
           <Route path="/trainer/courses/:courseId/materials" element={<UploadMaterial />} />
           <Route path="/trainer/courses/:courseId/questionnaire" element={<CreateQuestionnaire />} />
+          <Route path="/trainer/courses/:courseId/import-content" element={<ImportContent />} />
+          <Route path="/trainer/courses/:courseId/content-preview" element={<CourseContent />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={["trainee"]} />}>
@@ -42,6 +46,7 @@ export default function App() {
           <Route path="/trainee/profile" element={<Profile />} />
           <Route path="/trainee/enrollments" element={<Enrollments />} />
           <Route path="/trainee/assessments/:assessmentId" element={<TakeAssessment />} />
+          <Route path="/trainee/courses/:courseId/content" element={<CourseContent />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

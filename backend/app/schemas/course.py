@@ -30,6 +30,7 @@ class CourseOut(BaseModel):
     description: str | None
     trainer_id: uuid.UUID | None
     status: CourseStatus
+    meta: dict = {}
     created_at: datetime
 
     class Config:

@@ -95,6 +95,9 @@ export default function TrainerDashboard() {
               <Link to={`/trainer/courses/${c.id}/questionnaire`}>
                 <button className="secondary">Questionnaires</button>
               </Link>
+              <Link to={`/trainer/courses/${c.id}/import-content`}>
+                <button className="secondary">Import Content</button>
+              </Link>
             </div>
           </div>
         ))}

@@ -52,6 +52,9 @@ CREATE TABLE courses (
     description       TEXT,
     trainer_id        UUID REFERENCES users(id) ON DELETE SET NULL,
     status            course_status NOT NULL DEFAULT 'draft',
+    -- free-form course metadata: tier, difficulty, estimated_hours, prerequisites,
+    -- source_pdf, source_url, author — set on import, rendered as-is by the frontend.
+    meta              JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -100,6 +103,77 @@ CREATE INDEX idx_enrollments_trainee ON enrollments(trainee_id);
 CREATE INDEX idx_enrollments_course ON enrollments(course_id);
 
 -- ---------------------------------------------------------------------------
+-- course_weeks / lessons / lesson_content_blocks / lesson_note_anchors /
+-- week_completion_criteria / course_qa_items — structured lesson content,
+-- populated via the bulk course-content import endpoint (see
+-- POST /api/courses/{id}/import-content) rather than authored one row at a time.
+-- ---------------------------------------------------------------------------
+CREATE TABLE course_weeks (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id          UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    week_number        INTEGER NOT NULL,
+    title              VARCHAR(200) NOT NULL,
+    overview           TEXT,
+    estimated_minutes  INTEGER,
+    UNIQUE (course_id, week_number)
+);
+
+CREATE INDEX idx_weeks_course ON course_weeks(course_id);
+
+CREATE TABLE lessons (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    week_id            UUID NOT NULL REFERENCES course_weeks(id) ON DELETE CASCADE,
+    lesson_key         VARCHAR(50), -- e.g. "w1_l1", from the source content, for reference only
+    title              VARCHAR(200) NOT NULL,
+    order_index        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_lessons_week ON lessons(week_id);
+
+CREATE TABLE lesson_content_blocks (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lesson_id          UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    order_index        INTEGER NOT NULL DEFAULT 0,
+    block_type         VARCHAR(20) NOT NULL CHECK (block_type IN ('text', 'formula', 'example')),
+    heading            VARCHAR(200), -- text blocks
+    body               TEXT,         -- text / example blocks
+    label              VARCHAR(200), -- formula blocks
+    expression         TEXT,         -- formula blocks
+    explanation        TEXT          -- formula blocks
+);
+
+CREATE INDEX idx_content_blocks_lesson ON lesson_content_blocks(lesson_id);
+
+CREATE TABLE lesson_note_anchors (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lesson_id              UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    anchor_text            TEXT,
+    suggested_note_prompt  TEXT
+);
+
+CREATE INDEX idx_note_anchors_lesson ON lesson_note_anchors(lesson_id);
+
+CREATE TABLE week_completion_criteria (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    week_id            UUID NOT NULL REFERENCES course_weeks(id) ON DELETE CASCADE,
+    criterion_text     TEXT NOT NULL,
+    order_index        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_completion_criteria_week ON week_completion_criteria(week_id);
+
+CREATE TABLE course_qa_items (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id          UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    question           TEXT NOT NULL,
+    answer             TEXT NOT NULL,
+    source_week        INTEGER,
+    difficulty         VARCHAR(20)
+);
+
+CREATE INDEX idx_qa_items_course ON course_qa_items(course_id);
+
+-- ---------------------------------------------------------------------------
 -- assessments (questionnaires) — created by trainers, tied to a course
 -- ---------------------------------------------------------------------------
 CREATE TABLE assessments (
@@ -113,17 +187,23 @@ CREATE TABLE assessments (
 CREATE INDEX idx_assessments_course ON assessments(course_id);
 
 -- ---------------------------------------------------------------------------
--- assessment_questions — MCQ questions
+-- assessment_questions — mcq, true_false, fill_in_blank, or short_answer
 -- ---------------------------------------------------------------------------
+CREATE TYPE question_type AS ENUM ('mcq', 'true_false', 'fill_in_blank', 'short_answer');
+
 CREATE TABLE assessment_questions (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     assessment_id     UUID NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+    question_type     question_type NOT NULL DEFAULT 'mcq',
     question_text     TEXT NOT NULL,
-    option_a          VARCHAR(500) NOT NULL,
-    option_b          VARCHAR(500) NOT NULL,
-    option_c          VARCHAR(500) NOT NULL,
-    option_d          VARCHAR(500) NOT NULL,
-    correct_option    CHAR(1) NOT NULL CHECK (correct_option IN ('A', 'B', 'C', 'D')),
+    -- options only apply to mcq / true_false; NULL for fill_in_blank / short_answer
+    option_a          VARCHAR(500),
+    option_b          VARCHAR(500),
+    option_c          VARCHAR(500),
+    option_d          VARCHAR(500),
+    -- for mcq/true_false: the correct option letter (A-D). for fill_in_blank/short_answer:
+    -- the expected free-text answer, graded via a normalized (trim+lowercase) comparison.
+    correct_answer    VARCHAR(500) NOT NULL,
     competency_tag    VARCHAR(120)
 );
 

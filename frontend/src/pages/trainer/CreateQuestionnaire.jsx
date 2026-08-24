@@ -3,12 +3,13 @@ import { useParams } from "react-router-dom";
 import { createAssessment, listAssessmentsForCourse, listSubmissions } from "../../api/assessments";
 
 const emptyQuestion = () => ({
+  question_type: "mcq",
   question_text: "",
   option_a: "",
   option_b: "",
   option_c: "",
   option_d: "",
-  correct_option: "A",
+  correct_answer: "A",
   competency_tag: "",
 });
 
@@ -42,7 +43,12 @@ export default function CreateQuestionnaire() {
     e.preventDefault();
     setError("");
     try {
-      await createAssessment({ course_id: courseId, title, questions });
+      const cleaned = questions.map((q) =>
+        q.question_type === "mcq" || q.question_type === "true_false"
+          ? q
+          : { ...q, option_a: null, option_b: null, option_c: null, option_d: null }
+      );
+      await createAssessment({ course_id: courseId, title, questions: cleaned });
       setTitle("");
       setQuestions([emptyQuestion()]);
       load();
@@ -58,7 +64,7 @@ export default function CreateQuestionnaire() {
 
   return (
     <div className="container">
-      <h1>Create Questionnaire (MCQ Assessment)</h1>
+      <h1>Create Questionnaire</h1>
       <div className="card">
         <form onSubmit={handleCreate}>
           <label>Assessment title</label>
@@ -72,22 +78,71 @@ export default function CreateQuestionnaire() {
                 onChange={(e) => updateQuestion(i, "question_text", e.target.value)}
                 required
               />
-              {["a", "b", "c", "d"].map((opt) => (
-                <input
-                  key={opt}
-                  placeholder={`Option ${opt.toUpperCase()}`}
-                  value={q[`option_${opt}`]}
-                  onChange={(e) => updateQuestion(i, `option_${opt}`, e.target.value)}
-                  required
-                />
-              ))}
-              <label>Correct option</label>
-              <select value={q.correct_option} onChange={(e) => updateQuestion(i, "correct_option", e.target.value)}>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
+              <label>Question type</label>
+              <select
+                value={q.question_type}
+                onChange={(e) => {
+                  const type = e.target.value;
+                  updateQuestion(i, "question_type", type);
+                  updateQuestion(i, "correct_answer", type === "mcq" || type === "true_false" ? "A" : "");
+                }}
+              >
+                <option value="mcq">Multiple choice (4 options)</option>
+                <option value="true_false">True / False</option>
+                <option value="fill_in_blank">Fill in the blank</option>
+                <option value="short_answer">Short answer</option>
               </select>
+
+              {q.question_type === "mcq" &&
+                ["a", "b", "c", "d"].map((opt) => (
+                  <input
+                    key={opt}
+                    placeholder={`Option ${opt.toUpperCase()}`}
+                    value={q[`option_${opt}`]}
+                    onChange={(e) => updateQuestion(i, `option_${opt}`, e.target.value)}
+                    required
+                  />
+                ))}
+
+              {q.question_type === "true_false" &&
+                ["a", "b"].map((opt) => (
+                  <input
+                    key={opt}
+                    placeholder={`Option ${opt.toUpperCase()} (e.g. True / False)`}
+                    value={q[`option_${opt}`]}
+                    onChange={(e) => updateQuestion(i, `option_${opt}`, e.target.value)}
+                    required
+                  />
+                ))}
+
+              {(q.question_type === "mcq" || q.question_type === "true_false") && (
+                <>
+                  <label>Correct option</label>
+                  <select
+                    value={q.correct_answer}
+                    onChange={(e) => updateQuestion(i, "correct_answer", e.target.value)}
+                  >
+                    {(q.question_type === "mcq" ? ["A", "B", "C", "D"] : ["A", "B"]).map((letter) => (
+                      <option key={letter} value={letter}>
+                        {letter}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
+              {(q.question_type === "fill_in_blank" || q.question_type === "short_answer") && (
+                <>
+                  <label>Expected answer</label>
+                  <input
+                    value={q.correct_answer}
+                    onChange={(e) => updateQuestion(i, "correct_answer", e.target.value)}
+                    placeholder="Graded via a case-insensitive text match"
+                    required
+                  />
+                </>
+              )}
+
               <label>Competency tag (optional)</label>
               <input
                 value={q.competency_tag}
