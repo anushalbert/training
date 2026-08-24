@@ -167,6 +167,7 @@ def import_course_content(
                             option_d=padded[3],
                             correct_answer=letter,
                             competency_tag=None,
+                            source_week=q_in.source_week,
                         )
                     )
                 else:
@@ -177,6 +178,7 @@ def import_course_content(
                             question_text=q_in.question,
                             correct_answer=q_in.correct_answer,
                             competency_tag=None,
+                            source_week=q_in.source_week,
                         )
                     )
                 questions_created += 1

@@ -134,7 +134,7 @@ CREATE TABLE lesson_content_blocks (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lesson_id          UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
     order_index        INTEGER NOT NULL DEFAULT 0,
-    block_type         VARCHAR(20) NOT NULL CHECK (block_type IN ('text', 'formula', 'example')),
+    block_type         VARCHAR(20) NOT NULL CHECK (block_type IN ('text', 'formula', 'example', 'diagram_suggestion')),
     heading            VARCHAR(200), -- text blocks
     body               TEXT,         -- text / example blocks
     label              VARCHAR(200), -- formula blocks
@@ -174,6 +174,64 @@ CREATE TABLE course_qa_items (
 CREATE INDEX idx_qa_items_course ON course_qa_items(course_id);
 
 -- ---------------------------------------------------------------------------
+-- user_progress — one row per (user, lesson) marking that lesson complete
+-- ---------------------------------------------------------------------------
+CREATE TABLE user_progress (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id          UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    week_number        INTEGER NOT NULL,
+    lesson_id          UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    completed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, lesson_id)
+);
+
+CREATE INDEX idx_progress_user_course ON user_progress(user_id, course_id);
+
+-- ---------------------------------------------------------------------------
+-- quiz_attempts — one row per attempt at a week's gating quiz
+-- ---------------------------------------------------------------------------
+CREATE TABLE quiz_attempts (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    week_id            UUID NOT NULL REFERENCES course_weeks(id) ON DELETE CASCADE,
+    score              NUMERIC(5,2) NOT NULL DEFAULT 0,
+    passed             BOOLEAN NOT NULL DEFAULT FALSE,
+    answers            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    attempted_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_quiz_attempts_user_week ON quiz_attempts(user_id, week_id);
+
+-- ---------------------------------------------------------------------------
+-- notes — a trainee's personal note attached to a highlighted content excerpt
+-- ---------------------------------------------------------------------------
+CREATE TABLE notes (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lesson_id          UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    anchor_text        TEXT,
+    note_text          TEXT NOT NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_notes_user_lesson ON notes(user_id, lesson_id);
+
+-- ---------------------------------------------------------------------------
+-- tutor_conversations — AI tutor chat history per user per lesson
+-- ---------------------------------------------------------------------------
+CREATE TABLE tutor_conversations (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lesson_id          UUID NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    messages           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_tutor_conversations_user_lesson ON tutor_conversations(user_id, lesson_id);
+
+-- ---------------------------------------------------------------------------
 -- assessments (questionnaires) — created by trainers, tied to a course
 -- ---------------------------------------------------------------------------
 CREATE TABLE assessments (
@@ -204,10 +262,14 @@ CREATE TABLE assessment_questions (
     -- for mcq/true_false: the correct option letter (A-D). for fill_in_blank/short_answer:
     -- the expected free-text answer, graded via a normalized (trim+lowercase) comparison.
     correct_answer    VARCHAR(500) NOT NULL,
-    competency_tag    VARCHAR(120)
+    competency_tag    VARCHAR(120),
+    -- which course week this question gates (from ai_test_questions.source_week on import);
+    -- NULL for questions authored manually via the general questionnaire flow.
+    source_week       INTEGER
 );
 
 CREATE INDEX idx_questions_assessment ON assessment_questions(assessment_id);
+CREATE INDEX idx_questions_source_week ON assessment_questions(assessment_id, source_week);
 
 -- ---------------------------------------------------------------------------
 -- assessment_submissions — a trainee's attempt + score + answers

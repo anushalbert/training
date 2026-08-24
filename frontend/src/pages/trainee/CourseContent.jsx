@@ -1,180 +1,340 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getCourse } from "../../api/courses";
 import { getCourseWeeks, getCourseQA } from "../../api/content";
+import { getCourseProgress, completeLesson, listNotes, createNote, deleteNote } from "../../api/progress";
+import { useAuth } from "../../context/AuthContext";
+import QuizModal from "../../components/QuizModal";
 
 function ContentBlock({ block }) {
   if (block.block_type === "formula") {
     return (
-      <div className="card" style={{ background: "var(--bg)" }}>
-        {block.label && <strong>{block.label}</strong>}
-        <pre
-          style={{
-            whiteSpace: "pre-wrap",
-            fontFamily: "ui-monospace, Consolas, monospace",
-            background: "#fff",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            padding: 10,
-            margin: "8px 0",
-          }}
-        >
-          {block.expression}
-        </pre>
-        {block.explanation && <p className="muted">{block.explanation}</p>}
+      <div className="block-formula">
+        {block.label && <div className="formula-label">{block.label}</div>}
+        <p className="formula-expression">{block.expression}</p>
+        {block.explanation && <p className="formula-explanation">{block.explanation}</p>}
       </div>
     );
   }
 
   if (block.block_type === "example") {
     return (
-      <div className="card" style={{ background: "var(--bg)", borderLeft: "3px solid var(--primary)" }}>
-        <p style={{ margin: 0 }}>
-          <strong>Example: </strong>
-          {block.body}
-        </p>
+      <div className="block-example">
+        <div className="example-label">Example</div>
+        <p style={{ margin: 0 }}>{block.body}</p>
+      </div>
+    );
+  }
+
+  if (block.block_type === "diagram_suggestion") {
+    return (
+      <div className="block-diagram" role="img" aria-label={block.body}>
+        [Diagram: {block.body}]
       </div>
     );
   }
 
   return (
-    <div style={{ marginBottom: 12 }}>
-      {block.heading && <h4 style={{ marginBottom: 4 }}>{block.heading}</h4>}
-      <p style={{ marginTop: 0 }}>{block.body}</p>
+    <div className="block-text">
+      {block.heading && <h4>{block.heading}</h4>}
+      <p>{block.body}</p>
     </div>
   );
 }
 
-function Lesson({ lesson }) {
-  return (
-    <div className="card">
-      <h3>{lesson.title}</h3>
-      {lesson.content_blocks.map((b) => (
-        <ContentBlock key={b.id} block={b} />
-      ))}
-      {lesson.note_anchors.length > 0 && (
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--border)" }}>
-          {lesson.note_anchors.map((na) => (
-            <div key={na.id} style={{ marginBottom: 8 }}>
-              <span className="muted">Reflect: </span>
-              <em>{na.suggested_note_prompt}</em>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Week({ week, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <div className="card">
-      <div
-        style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <h2 style={{ margin: 0 }}>
-          Week {week.week_number}: {week.title}
-        </h2>
-        <span className="muted">{open ? "▲" : "▼"}</span>
-      </div>
-      {week.overview && <p className="muted">{week.overview}</p>}
-      {week.estimated_minutes && <p className="muted">Est. {week.estimated_minutes} minutes</p>}
-
-      {open && (
-        <>
-          {week.lessons.map((lesson) => (
-            <Lesson key={lesson.id} lesson={lesson} />
-          ))}
-
-          {week.completion_criteria.length > 0 && (
-            <div className="card" style={{ background: "var(--bg)" }}>
-              <strong>By the end of this week, you should be able to:</strong>
-              <ul>
-                {week.completion_criteria.map((c) => (
-                  <li key={c.id}>{c.criterion_text}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function QAAccordion({ items }) {
-  const [openId, setOpenId] = useState(null);
-  if (items.length === 0) return null;
-
-  return (
-    <div className="card">
-      <h2>AI Q&amp;A: Concept Clarification</h2>
-      {items.map((item) => (
-        <div key={item.id} style={{ borderBottom: "1px solid var(--border)", padding: "10px 0" }}>
-          <div style={{ cursor: "pointer" }} onClick={() => setOpenId(openId === item.id ? null : item.id)}>
-            <strong>{item.question}</strong>{" "}
-            {item.difficulty && <span className="badge">{item.difficulty}</span>}
-          </div>
-          {openId === item.id && <p className="muted" style={{ marginTop: 8 }}>{item.answer}</p>}
-        </div>
-      ))}
-    </div>
-  );
+function findMatchingAnchors(block, anchors, matchedIds) {
+  const matches = [];
+  const text = `${block.heading || ""} ${block.body || ""} ${block.expression || ""}`.toLowerCase();
+  for (const anchor of anchors) {
+    if (matchedIds.has(anchor.id)) continue;
+    if (anchor.anchor_text && text.includes(anchor.anchor_text.toLowerCase().slice(0, 40))) {
+      matches.push(anchor);
+      matchedIds.add(anchor.id);
+    }
+  }
+  return matches;
 }
 
 export default function CourseContent() {
   const { courseId } = useParams();
+  const { user } = useAuth();
+  const previewMode = user?.role !== "trainee";
+
   const [course, setCourse] = useState(null);
   const [weeks, setWeeks] = useState([]);
   const [qa, setQa] = useState([]);
+  const [progress, setProgress] = useState(null);
+  const [selectedLessonId, setSelectedLessonId] = useState(null);
+  const [expandedWeeks, setExpandedWeeks] = useState(new Set());
   const [error, setError] = useState("");
+  const [quizWeek, setQuizWeek] = useState(null);
+  const [notes, setNotes] = useState([]);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [selectedText, setSelectedText] = useState("");
+  const mainRef = useRef(null);
+  const autoCompletedRef = useRef(new Set());
 
-  useEffect(() => {
+  function loadCore() {
     Promise.all([getCourse(courseId), getCourseWeeks(courseId), getCourseQA(courseId)])
       .then(([c, w, q]) => {
         setCourse(c);
         setWeeks(w);
         setQa(q);
+        if (w.length > 0) {
+          setExpandedWeeks(new Set([w[0].week_number]));
+          if (w[0].lessons.length > 0) setSelectedLessonId(w[0].lessons[0].id);
+        }
       })
       .catch((err) => setError(err.response?.data?.detail || "Failed to load course content"));
-  }, [courseId]);
+  }
 
-  if (error) return <div className="container error-text">{error}</div>;
+  function loadProgress() {
+    if (previewMode) return;
+    getCourseProgress(courseId)
+      .then(setProgress)
+      .catch(() => {});
+  }
+
+  useEffect(loadCore, [courseId]);
+  useEffect(loadProgress, [courseId]);
+
+  useEffect(() => {
+    if (!selectedLessonId || previewMode) return;
+    listNotes(selectedLessonId)
+      .then(setNotes)
+      .catch(() => setNotes([]));
+  }, [selectedLessonId, previewMode]);
+
+  const flatLessons = useMemo(() => {
+    const out = [];
+    for (const w of weeks) {
+      for (const l of w.lessons) out.push({ ...l, week_number: w.week_number });
+    }
+    return out;
+  }, [weeks]);
+
+  const currentLesson = flatLessons.find((l) => l.id === selectedLessonId);
+  const currentWeek = weeks.find((w) => w.week_number === currentLesson?.week_number);
+
+  const weekProgress = (weekNumber) => progress?.weeks.find((w) => w.week_number === weekNumber);
+  const isCompleted = (lessonId) => progress?.completed_lesson_ids.includes(lessonId);
+  const isWeekUnlocked = (weekNumber) => previewMode || weekProgress(weekNumber)?.unlocked !== false;
+
+  function toggleWeek(weekNumber) {
+    if (!isWeekUnlocked(weekNumber)) return;
+    setExpandedWeeks((prev) => {
+      const next = new Set(prev);
+      if (next.has(weekNumber)) next.delete(weekNumber);
+      else next.add(weekNumber);
+      return next;
+    });
+  }
+
+  function selectLesson(lessonId, weekNumber) {
+    if (!isWeekUnlocked(weekNumber)) return;
+    setSelectedLessonId(lessonId);
+    setNoteDraft("");
+    setSelectedText("");
+  }
+
+  async function markComplete(lessonId) {
+    if (previewMode) return;
+    try {
+      await completeLesson(lessonId);
+      const updated = await getCourseProgress(courseId);
+      setProgress(updated);
+
+      const wp = updated.weeks.find((w) => w.week_number === currentLesson.week_number);
+      if (wp && wp.lessons_done && wp.quiz_required && !wp.quiz_passed) {
+        setQuizWeek(currentLesson.week_number);
+      }
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to save progress");
+    }
+  }
+
+  function handleScroll() {
+    if (previewMode || !currentLesson) return;
+    const el = mainRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (nearBottom && !autoCompletedRef.current.has(currentLesson.id) && !isCompleted(currentLesson.id)) {
+      autoCompletedRef.current.add(currentLesson.id);
+      markComplete(currentLesson.id);
+    }
+  }
+
+  function handleTextSelect() {
+    const sel = window.getSelection()?.toString() || "";
+    setSelectedText(sel.trim());
+  }
+
+  async function handleSaveNote() {
+    if (!noteDraft.trim() || !currentLesson) return;
+    try {
+      const note = await createNote(currentLesson.id, { anchor_text: selectedText || null, note_text: noteDraft });
+      setNotes((prev) => [note, ...prev]);
+      setNoteDraft("");
+      setSelectedText("");
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to save note");
+    }
+  }
+
+  async function handleDeleteNote(noteId) {
+    await deleteNote(noteId);
+    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+  }
+
+  function handleQuizPassed() {
+    setQuizWeek(null);
+    loadProgress();
+  }
+
+  if (error && !course) return <div className="container error-text">{error}</div>;
   if (!course) return <div className="container muted">Loading...</div>;
 
-  const meta = course.meta || {};
+  const matchedAnchorIds = new Set();
 
   return (
-    <div className="container">
-      <h1>{course.title}</h1>
-      <div className="card">
-        {meta.tier && <span className="badge" style={{ marginRight: 8 }}>{meta.tier}</span>}
-        {meta.difficulty && <span className="badge">{meta.difficulty}</span>}
-        {meta.author && <p className="muted">By {meta.author}</p>}
-        {meta.estimated_hours && <p className="muted">Estimated: {meta.estimated_hours} hours</p>}
-        {meta.prerequisites?.length > 0 && (
-          <p className="muted">Prerequisites: {meta.prerequisites.join(", ")}</p>
+    <div className="player-shell">
+      <div className="player-sidebar">
+        <div className="progress-header">
+          <div className="content">
+            <h2>{course.title}</h2>
+            {previewMode ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Preview mode — progress tracking is trainee-only.
+              </p>
+            ) : (
+              <>
+                <span className="progress-pct">
+                  {progress ? `${progress.completed_lessons}/${progress.total_lessons} lessons — ${progress.percent}%` : "—"}
+                </span>
+                <div className="progress-bar-track">
+                  <div className="progress-bar-fill" style={{ width: `${progress?.percent || 0}%` }} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {weeks.map((w) => {
+          const unlocked = isWeekUnlocked(w.week_number);
+          const expanded = expandedWeeks.has(w.week_number);
+          return (
+            <div className="week-block" key={w.id}>
+              <div className={`week-header ${unlocked ? "" : "locked"}`} onClick={() => toggleWeek(w.week_number)}>
+                <span className="week-num">W{w.week_number}</span>
+                <span className="week-title">{w.title}</span>
+                {!unlocked && <span className="lock-icon">🔒</span>}
+              </div>
+              {expanded &&
+                unlocked &&
+                w.lessons.map((l) => (
+                  <div
+                    key={l.id}
+                    className={`lesson-row ${selectedLessonId === l.id ? "active" : ""}`}
+                    onClick={() => selectLesson(l.id, w.week_number)}
+                  >
+                    <span className={`check ${!previewMode && isCompleted(l.id) ? "" : "incomplete"}`}>
+                      {!previewMode && isCompleted(l.id) ? "✓" : "○"}
+                    </span>
+                    {l.title}
+                  </div>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="player-main" ref={mainRef} onScroll={handleScroll} onMouseUp={handleTextSelect}>
+        {error && <p className="error-text">{error}</p>}
+        {!currentLesson ? (
+          <p className="muted">Select a lesson to begin.</p>
+        ) : (
+          <>
+            <h1>{currentLesson.title}</h1>
+            {currentLesson.content_blocks.map((b) => {
+              const anchors = findMatchingAnchors(b, currentLesson.note_anchors, matchedAnchorIds);
+              return (
+                <div key={b.id}>
+                  <ContentBlock block={b} />
+                  {anchors.map((a) => (
+                    <div className="note-anchor-hint" key={a.id}>
+                      Reflect: {a.suggested_note_prompt}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {currentLesson.note_anchors
+              .filter((a) => !matchedAnchorIds.has(a.id))
+              .map((a) => (
+                <div className="note-anchor-hint" key={a.id}>
+                  Reflect: {a.suggested_note_prompt}
+                </div>
+              ))}
+
+            {!previewMode && (
+              <>
+                <div className="card" style={{ marginTop: 24 }}>
+                  <strong>Notes</strong>
+                  <p className="muted" style={{ marginTop: 4 }}>
+                    Highlight any text above, then attach a note to it — or just jot a general note.
+                  </p>
+                  {selectedText && (
+                    <p className="muted">
+                      Selected: <em>"{selectedText.slice(0, 80)}{selectedText.length > 80 ? "…" : ""}"</em>
+                    </p>
+                  )}
+                  <textarea rows={2} value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Your note" />
+                  <button className="secondary" onClick={handleSaveNote} disabled={!noteDraft.trim()}>
+                    Save note
+                  </button>
+                  {notes.map((n) => (
+                    <div key={n.id} style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+                      {n.anchor_text && <p className="muted" style={{ margin: 0 }}>On: "{n.anchor_text.slice(0, 60)}"</p>}
+                      <p style={{ margin: "2px 0" }}>{n.note_text}</p>
+                      <button className="secondary" onClick={() => handleDeleteNote(n.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="lesson-nav">
+                  <span />
+                  <button onClick={() => markComplete(currentLesson.id)} disabled={isCompleted(currentLesson.id)}>
+                    {isCompleted(currentLesson.id) ? "Completed" : "Mark as complete"}
+                  </button>
+                </div>
+              </>
+            )}
+          </>
         )}
-        {meta.source_url && (
-          <p className="muted">
-            Source:{" "}
-            <a href={meta.source_url} target="_blank" rel="noreferrer">
-              {meta.source_pdf || meta.source_url}
-            </a>
-          </p>
+
+        {qa.length > 0 && (
+          <div className="card" style={{ marginTop: 24 }}>
+            <h2>AI Q&amp;A: Concept Clarification</h2>
+            {qa.map((item) => (
+              <details key={item.id} style={{ marginBottom: 8 }}>
+                <summary style={{ cursor: "pointer", fontWeight: 500 }}>{item.question}</summary>
+                <p className="muted">{item.answer}</p>
+              </details>
+            ))}
+          </div>
         )}
       </div>
 
-      {weeks.length === 0 ? (
-        <p className="muted">No structured lesson content has been added to this course yet.</p>
-      ) : (
-        weeks.map((w, i) => <Week key={w.id} week={w} defaultOpen={i === 0} />)
+      {quizWeek !== null && (
+        <QuizModal
+          courseId={courseId}
+          weekNumber={quizWeek}
+          onPassed={handleQuizPassed}
+          onExit={() => setQuizWeek(null)}
+        />
       )}
-
-      <QAAccordion items={qa} />
     </div>
   );
 }

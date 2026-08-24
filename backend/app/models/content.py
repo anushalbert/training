@@ -43,7 +43,9 @@ class Lesson(Base):
 
 class LessonContentBlock(Base):
     __tablename__ = "lesson_content_blocks"
-    __table_args__ = (CheckConstraint("block_type IN ('text', 'formula', 'example')", name="ck_block_type"),)
+    __table_args__ = (
+        CheckConstraint("block_type IN ('text', 'formula', 'example', 'diagram_suggestion')", name="ck_block_type"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     lesson_id = Column(UUID(as_uuid=True), ForeignKey("lessons.id", ondelete="CASCADE"), nullable=False)

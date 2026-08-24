@@ -11,6 +11,7 @@ from app.models.content import (
     WeekCompletionCriterion,
     CourseQAItem,
 )
+from app.models.progress import UserProgress, QuizAttempt, Note, TutorConversation
 
 __all__ = [
     "User",
@@ -31,4 +32,8 @@ __all__ = [
     "LessonNoteAnchor",
     "WeekCompletionCriterion",
     "CourseQAItem",
+    "UserProgress",
+    "QuizAttempt",
+    "Note",
+    "TutorConversation",
 ]

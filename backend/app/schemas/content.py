@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class ContentBlockImport(BaseModel):
-    type: str = Field(pattern="^(text|formula|example)$")
+    type: str = Field(pattern="^(text|formula|example|diagram_suggestion)$")
     heading: str | None = None
     body: str | None = None
     label: str | None = None

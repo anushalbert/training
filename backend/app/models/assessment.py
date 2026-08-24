@@ -43,6 +43,8 @@ class AssessmentQuestion(Base):
     # mcq/true_false: correct option letter (A-D). fill_in_blank/short_answer: expected free text.
     correct_answer = Column(String(500), nullable=False)
     competency_tag = Column(String(120), nullable=True)
+    # which course week this question gates (from ai_test_questions.source_week on import)
+    source_week = Column(Integer, nullable=True)
 
     assessment = relationship("Assessment", back_populates="questions")
 
