@@ -5,6 +5,7 @@ import { getCourseWeeks, getCourseQA } from "../../api/content";
 import { getCourseProgress, completeLesson, listNotes, createNote, deleteNote } from "../../api/progress";
 import { useAuth } from "../../context/AuthContext";
 import QuizModal from "../../components/QuizModal";
+import TutorPanel from "../../components/TutorPanel";
 
 function ContentBlock({ block }) {
   if (block.block_type === "formula") {
@@ -71,6 +72,7 @@ export default function CourseContent() {
   const [notes, setNotes] = useState([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [selectedText, setSelectedText] = useState("");
+  const [tutorOpen, setTutorOpen] = useState(false);
   const mainRef = useRef(null);
   const autoCompletedRef = useRef(new Set());
 
@@ -334,6 +336,15 @@ export default function CourseContent() {
           onPassed={handleQuizPassed}
           onExit={() => setQuizWeek(null)}
         />
+      )}
+
+      {!previewMode && currentLesson && !tutorOpen && (
+        <button className="tutor-toggle" onClick={() => setTutorOpen(true)}>
+          Ask the tutor
+        </button>
+      )}
+      {!previewMode && currentLesson && tutorOpen && (
+        <TutorPanel lessonId={currentLesson.id} onClose={() => setTutorOpen(false)} />
       )}
     </div>
   );
