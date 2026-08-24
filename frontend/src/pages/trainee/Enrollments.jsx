@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { myEnrollments, listCourses, listAssessmentsForCourse, submitFeedback } from "../../api/courses";
+import { myEnrollments, listCourses, submitFeedback } from "../../api/courses";
+import { listAssessmentsForCourse } from "../../api/assessments";
 
 export default function Enrollments() {
   const [enrollments, setEnrollments] = useState([]);
