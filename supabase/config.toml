@@ -1,0 +1,42 @@
+# Supabase local development config
+# Run with: supabase start   (requires Supabase CLI)
+# Docs: https://supabase.com/docs/guides/local-development
+
+project_id = "training-platform"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 16
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173"]
+jwt_expiry = 3600
+enable_signup = true
+
+# NOTE: This scaffold uses its own FastAPI + JWT auth (see backend/app/core/security.py),
+# not Supabase Auth. If you prefer Supabase Auth + Row Level Security instead of the
+# custom JWT layer, disable [auth] usage here and wire the frontend to supabase-js,
+# then adapt backend/app/api/deps.py to verify Supabase JWTs instead of issuing your own.
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+# Used for trainer-uploaded course materials (PDFs, slides, videos) when running on Supabase.
+# Bucket "course-materials" should be created via the Studio UI or CLI:
+#   supabase storage buckets create course-materials
