@@ -1,4 +1,5 @@
 import uuid
+from typing import Union
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from app.models.user import User, UserRole
 from app.schemas.assessment import (
     AssessmentCreate,
     AssessmentDetail,
+    AssessmentDetailWithAnswers,
     AssessmentOut,
     QuestionOut,
     QuestionOutWithAnswer,
@@ -21,7 +23,7 @@ from app.api.deps import get_current_user, require_trainer
 router = APIRouter(prefix="/api/assessments", tags=["assessments"])
 
 
-@router.post("", response_model=AssessmentDetail, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AssessmentDetailWithAnswers, status_code=status.HTTP_201_CREATED)
 def create_assessment(
     payload: AssessmentCreate,
     current_user: User = Depends(require_trainer),
@@ -54,7 +56,7 @@ def list_assessments_for_course(
     return db.query(Assessment).filter(Assessment.course_id == course_id).all()
 
 
-@router.get("/{assessment_id}", response_model=AssessmentDetail)
+@router.get("/{assessment_id}", response_model=Union[AssessmentDetailWithAnswers, AssessmentDetail])
 def get_assessment(
     assessment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -79,9 +81,9 @@ def get_assessment(
     return _to_detail_with_answers(assessment)
 
 
-def _to_detail_with_answers(assessment: Assessment) -> AssessmentDetail:
+def _to_detail_with_answers(assessment: Assessment) -> AssessmentDetailWithAnswers:
     questions = [QuestionOutWithAnswer.model_validate(q) for q in assessment.questions]
-    return AssessmentDetail(
+    return AssessmentDetailWithAnswers(
         id=assessment.id,
         course_id=assessment.course_id,
         title=assessment.title,

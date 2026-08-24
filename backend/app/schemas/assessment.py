@@ -72,6 +72,10 @@ class AssessmentDetail(AssessmentOut):
     questions: list[QuestionOut]
 
 
+class AssessmentDetailWithAnswers(AssessmentOut):
+    questions: list[QuestionOutWithAnswer]
+
+
 class SubmissionCreate(BaseModel):
     answers: dict[uuid.UUID, str] = Field(description="question_id -> answer (option letter, or free text)")
 
